@@ -36,7 +36,7 @@ import {
 import { UserButton, useAuth } from '@clerk/clerk-react';
 import './App.css';
 
-const API_BASE_URL = 'https://notes-app-backend-41ic.onrender.com/api/notes';
+const API_BASE_URL = 'https://notes-app-backend-41ic.onrender.com/api';
 
 function SortableNoteCard({ note, selectedNote, onSelect, onDelete }) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -136,7 +136,7 @@ function App() {
 
   // Initialize Socket.IO connection
   useEffect(() => {
-    const newSocket = io('http://localhost:5001');
+    const newSocket = io('https://notes-app-backend-41ic.onrender.com');
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
