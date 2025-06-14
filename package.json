@@ -1,0 +1,35 @@
+{
+  "name": "notes-app",
+  "version": "1.0.0",
+  "description": "A full-stack Notes application with Markdown editor and real-time sync",
+  "main": "index.js",
+  "scripts": {
+    "start": "./start.sh",
+    "install-all": "cd backend && npm install && cd ../frontend/notes-frontend && pnpm install",
+    "dev": "./start.sh",
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd frontend/notes-frontend && pnpm run dev --host",
+    "build": "cd frontend/notes-frontend && pnpm run build"
+  },
+  "keywords": [
+    "notes",
+    "markdown",
+    "real-time",
+    "mern",
+    "socket.io",
+    "react",
+    "nodejs",
+    "mongodb",
+    "express"
+  ],
+  "author": "Manus AI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "notes-app"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
+
