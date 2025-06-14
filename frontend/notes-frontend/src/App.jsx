@@ -36,7 +36,7 @@ import {
 import { UserButton, useAuth } from '@clerk/clerk-react';
 import './App.css';
 
-const API_BASE_URL = 'https://notes-app-backend-41ic.onrender.com';
+const API_BASE_URL = 'https://notes-app-backend-41ic.onrender.com/api/notes';
 
 function SortableNoteCard({ note, selectedNote, onSelect, onDelete }) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
