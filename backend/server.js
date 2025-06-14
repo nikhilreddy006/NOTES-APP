@@ -3,9 +3,41 @@ const http = require('http');
 const socketIo = require('socket.io');
 const mongoose = require('mongoose');
 const cors = require('cors');
-require('dotenv').config();
+const dotenv = require('dotenv');
+const jwt = require('jsonwebtoken');
 
+dotenv.config();
 const app = express();
+
+app.use(express.json());
+
+// Clerk middleware
+function verifyClerkToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    console.error("No Authorization header provided.");
+    return res.sendStatus(401);
+  }
+
+  const token = authHeader.split(" ")[1];
+  const clerkPublicKey = process.env.CLERK_JWT_PUBLIC_KEY;
+
+  console.log("Clerk Public Key loaded:", !!clerkPublicKey); // Should be true
+  console.log("First 30 chars of Public Key:", clerkPublicKey ? clerkPublicKey.slice(0, 30) : "N/A");
+  console.log("Token received (first 30 chars):", token ? token.slice(0, 30) : "N/A");
+
+  try {
+    const payload = jwt.verify(token, clerkPublicKey, { algorithms: ["RS256"] });
+    req.user = payload;
+    console.log("JWT Verified successfully. User ID:", payload.sub); // Success log
+    next();
+  } catch (err) {
+    console.error("JWT verification error:", err.message); // THIS IS CRUCIAL
+    console.error("Full JWT verification error object:", err); // More details
+    res.status(401).json({ message: "Unauthorized", error: err.message });
+  }
+}
+
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
@@ -30,6 +62,7 @@ mongoose.connect(MONGODB_URI, {
 // Note Schema
 const noteSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
+  userId: { type: String, required: true }, // Clerk user ID
   title: { type: String, required: true },
   content: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now },
@@ -39,20 +72,20 @@ const noteSchema = new mongoose.Schema({
 const Note = mongoose.model('Note', noteSchema);
 
 // API Routes
-// Get all notes
-app.get('/api/notes', async (req, res) => {
+// Get all notes for the authenticated user
+app.get('/api/notes', verifyClerkToken, async (req, res) => {
   try {
-    const notes = await Note.find().sort({ updatedAt: -1 });
+    const notes = await Note.find({ userId: req.user.sub }).sort({ updatedAt: -1 });
     res.json(notes);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get a specific note
-app.get('/api/notes/:id', async (req, res) => {
+// Get a specific note for the authenticated user
+app.get('/api/notes/:id', verifyClerkToken, async (req, res) => {
   try {
-    const note = await Note.findOne({ id: req.params.id });
+    const note = await Note.findOne({ id: req.params.id, userId: req.user.sub });
     if (!note) {
       return res.status(404).json({ error: 'Note not found' });
     }
@@ -62,64 +95,57 @@ app.get('/api/notes/:id', async (req, res) => {
   }
 });
 
-// Create a new note
-app.post('/api/notes', async (req, res) => {
+// Create a new note for the authenticated user
+app.post('/api/notes', verifyClerkToken, async (req, res) => {
   try {
     const { id, title, content } = req.body;
     const note = new Note({
       id: id || require('uuid').v4(),
+      userId: req.user.sub,
       title: title || 'Untitled Note',
       content: content || ''
     });
+    
+    console.log("Attempting to save new note:", note);
     await note.save();
+    console.log("Note saved successfully:", note.id);
     
-    // Emit to all connected clients
     io.emit('noteCreated', note);
-    
     res.status(201).json(note);
   } catch (error) {
+    console.error('Error creating note (database save failed):', error.message);
+    console.error('Full error object for note creation:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Update a note
-app.put('/api/notes/:id', async (req, res) => {
+// Update a note for the authenticated user
+app.put('/api/notes/:id', verifyClerkToken, async (req, res) => {
   try {
     const { title, content } = req.body;
     const note = await Note.findOneAndUpdate(
-      { id: req.params.id },
-      { 
-        title, 
-        content, 
-        updatedAt: new Date() 
-      },
+      { id: req.params.id, userId: req.user.sub },
+      { title, content, updatedAt: new Date() },
       { new: true }
     );
-    
     if (!note) {
       return res.status(404).json({ error: 'Note not found' });
     }
-    
-    // Emit to all connected clients
     io.emit('noteUpdated', note);
-    
     res.json(note);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Delete a note
-app.delete('/api/notes/:id', async (req, res) => {
+// Delete a note for the authenticated user
+app.delete('/api/notes/:id', verifyClerkToken, async (req, res) => {
   try {
-    const note = await Note.findOneAndDelete({ id: req.params.id });
+    const note = await Note.findOneAndDelete({ id: req.params.id, userId: req.user.sub });
     if (!note) {
       return res.status(404).json({ error: 'Note not found' });
     }
-    
-    // Emit to all connected clients
     io.emit('noteDeleted', { id: req.params.id });
-    
     res.json({ message: 'Note deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });

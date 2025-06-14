@@ -33,6 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { UserButton, useAuth } from '@clerk/clerk-react';
 import './App.css';
 
 const API_BASE_URL = 'http://localhost:5001/api';
@@ -126,6 +127,7 @@ function SortableNoteCard({ note, selectedNote, onSelect, onDelete }) {
 }
 
 function App() {
+  const { getToken } = useAuth();
   const [notes, setNotes] = useState([]);
   const [selectedNote, setSelectedNote] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -182,7 +184,11 @@ function App() {
 
   const fetchNotes = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/notes`);
+      const token = await getToken();
+      const response = await axios.get(`${API_BASE_URL}/notes`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      console.log('Fetched notes:', response.data);
       setNotes(response.data);
     } catch (error) {
       console.error('Error fetching notes:', error);
@@ -191,12 +197,15 @@ function App() {
 
   const createNote = async () => {
     try {
+      const token = await getToken();
       const newNote = {
         title: 'Untitled Note',
         content: '# New Note\n\nStart writing your markdown content here...'
       };
       
-      const response = await axios.post(`${API_BASE_URL}/notes`, newNote);
+      const response = await axios.post(`${API_BASE_URL}/notes`, newNote, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setSelectedNote(response.data);
     } catch (error) {
       console.error('Error creating note:', error);
@@ -205,7 +214,10 @@ function App() {
 
   const updateNote = async (noteId, updates) => {
     try {
-      await axios.put(`${API_BASE_URL}/notes/${noteId}`, updates);
+      const token = await getToken();
+      await axios.put(`${API_BASE_URL}/notes/${noteId}`, updates, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       
       // Emit real-time update via Socket.IO
       if (socket) {
@@ -218,7 +230,10 @@ function App() {
 
   const deleteNote = async (noteId) => {
     try {
-      await axios.delete(`${API_BASE_URL}/notes/${noteId}`);
+      const token = await getToken();
+      await axios.delete(`${API_BASE_URL}/notes/${noteId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
     } catch (error) {
       console.error('Error deleting note:', error);
     }
@@ -286,43 +301,41 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-background">
-      {/* Sidebar */}
-      <div className="w-80 border-r border-border bg-card">
-        <div className="p-4 border-b border-border">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-bold">Notes App</h1>
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-              <Button onClick={createNote} size="sm">
-                <Plus className="w-4 h-4" />
-              </Button>
+    <div className="min-h-screen bg-background">
+      <header className="border-b p-4 flex justify-between items-center">
+        <h1 className="text-xl font-bold">Notes App</h1>
+        <UserButton afterSignOutUrl="/" />
+      </header>
+      <div className="flex h-screen bg-background">
+        {/* Sidebar */}
+        <div className="w-80 border-r border-border bg-card">
+          <div className="p-4 border-b border-border">
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-xl font-bold">Notes App</h1>
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                <Button onClick={createNote} size="sm">
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search notes..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
             </div>
           </div>
           
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search notes..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </div>
-        
-        <ScrollArea className="h-[calc(100vh-120px)]">
-          <div className="p-2">
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={filteredNotes.map(note => note.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                {filteredNotes.map((note) => (
+          <ScrollArea className="h-[calc(100vh-120px)]">
+            <div className="p-2">
+              {/* Temporarily removed DndContext and SortableContext for debugging */}
+              {
+                filteredNotes.map((note) => (
                   <SortableNoteCard
                     key={note.id}
                     note={note}
@@ -330,67 +343,66 @@ function App() {
                     onSelect={handleNoteSelect}
                     onDelete={deleteNote}
                   />
-                ))}
-              </SortableContext>
-            </DndContext>
-            
-            {filteredNotes.length === 0 && (
-              <div className="text-center text-muted-foreground mt-8">
-                <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>No notes found</p>
-                <p className="text-xs">Create your first note to get started</p>
-              </div>
-            )}
-          </div>
-        </ScrollArea>
-      </div>
+                ))
+              }
+              
+              {filteredNotes.length === 0 && (
+                <div className="text-center text-muted-foreground mt-8">
+                  <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No notes found</p>
+                  <p className="text-xs">Create your first note to get started</p>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {selectedNote ? (
-          <>
-            {/* Note Header */}
-            <div className="p-4 border-b border-border bg-card">
-              <Input
-                value={selectedNote.title}
-                onChange={(e) => handleTitleChange(e.target.value)}
-                className="text-lg font-semibold border-none bg-transparent p-0 focus-visible:ring-0"
-                placeholder="Note title..."
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Last updated: {new Date(selectedNote.updatedAt).toLocaleString()}
-              </p>
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col">
+          {selectedNote ? (
+            <>
+              {/* Note Header */}
+              <div className="p-4 border-b border-border bg-card">
+                <Input
+                  value={selectedNote.title}
+                  onChange={(e) => handleTitleChange(e.target.value)}
+                  className="text-lg font-semibold border-none bg-transparent p-0 focus-visible:ring-0"
+                  placeholder="Note title..."
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Last updated: {new Date(selectedNote.updatedAt).toLocaleString()}
+                </p>
+              </div>
+              
+              {/* Markdown Editor */}
+              <div className="flex-1 p-4">
+                <MDEditor
+                  value={selectedNote.content}
+                  onChange={handleContentChange}
+                  height={`calc(100vh - 180px)`}
+                  preview="edit"
+                  hideToolbar={false}
+                  data-color-mode="light"
+                />
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <h2 className="text-xl font-semibold mb-2">Welcome to Notes App</h2>
+                <p className="mb-4">Select a note from the sidebar or create a new one to get started</p>
+                <Button onClick={createNote}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Your First Note
+                </Button>
+              </div>
             </div>
-            
-            {/* Markdown Editor */}
-            <div className="flex-1 p-4">
-              <MDEditor
-                value={selectedNote.content}
-                onChange={handleContentChange}
-                height={`calc(100vh - 180px)`}
-                preview="edit"
-                hideToolbar={false}
-                data-color-mode="light"
-              />
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            <div className="text-center">
-              <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <h2 className="text-xl font-semibold mb-2">Welcome to Notes App</h2>
-              <p className="mb-4">Select a note from the sidebar or create a new one to get started</p>
-              <Button onClick={createNote}>
-                <Plus className="w-4 h-4 mr-2" />
-                Create Your First Note
-              </Button>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 export default App;
-
