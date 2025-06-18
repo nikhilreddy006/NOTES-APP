@@ -70,6 +70,9 @@ notes-app/
 ### 1. Clone and Setup
 
 ```bash
+# Clone github repo 
+git clone https://github.com/nikhilreddy006/NOTES-APP.git
+
 # Navigate to the project directory
 cd notes-app
 ```
@@ -82,9 +85,6 @@ cd backend
 
 # Install dependencies
 npm install
-
-# Start MongoDB service (if not already running)
-sudo systemctl start mongod
 
 # Start the backend server
 npm run dev
@@ -226,5 +226,4 @@ Contributions are welcome! Please feel free to submit issues and enhancement req
 
 ---
 
-**Built with ❤️ using the MERN stack and Socket.IO**
 
