@@ -65,6 +65,7 @@ const noteSchema = new mongoose.Schema({
   userId: { type: String, required: true }, // Clerk user ID
   title: { type: String, required: true },
   content: { type: String, default: '' },
+  pinned: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
@@ -75,7 +76,7 @@ const Note = mongoose.model('Note', noteSchema);
 // Get all notes for the authenticated user
 app.get('/api/notes', verifyClerkToken, async (req, res) => {
   try {
-    const notes = await Note.find({ userId: req.user.sub }).sort({ updatedAt: -1 });
+    const notes = await Note.find({ userId: req.user.sub }).sort({ pinned: -1, updatedAt: -1 });
     res.json(notes);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -98,12 +99,13 @@ app.get('/api/notes/:id', verifyClerkToken, async (req, res) => {
 // Create a new note for the authenticated user
 app.post('/api/notes', verifyClerkToken, async (req, res) => {
   try {
-    const { id, title, content } = req.body;
+    const { id, title, content, pinned } = req.body;
     const note = new Note({
       id: id || require('uuid').v4(),
       userId: req.user.sub,
       title: title || 'Untitled Note',
-      content: content || ''
+      content: content || '',
+      pinned: pinned || false,
     });
     
     console.log("Attempting to save new note:", note);
@@ -122,10 +124,10 @@ app.post('/api/notes', verifyClerkToken, async (req, res) => {
 // Update a note for the authenticated user
 app.put('/api/notes/:id', verifyClerkToken, async (req, res) => {
   try {
-    const { title, content } = req.body;
+    const { title, content, pinned } = req.body;
     const note = await Note.findOneAndUpdate(
       { id: req.params.id, userId: req.user.sub },
-      { title, content, updatedAt: new Date() },
+      { title, content, pinned, updatedAt: new Date() },
       { new: true }
     );
     if (!note) {
@@ -159,12 +161,13 @@ io.on('connection', (socket) => {
   // Handle real-time note updates
   socket.on('noteUpdate', async (data) => {
     try {
-      const { id, title, content } = data;
+      const { id, title, content, pinned } = data;
       const note = await Note.findOneAndUpdate(
         { id },
         { 
           title, 
           content, 
+          pinned,
           updatedAt: new Date() 
         },
         { new: true }

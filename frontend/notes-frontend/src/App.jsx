@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx';
 import { ScrollArea } from '@/components/ui/scroll-area.jsx';
-import { Plus, FileText, Trash2, Search, GripVertical } from 'lucide-react';
+import { Plus, FileText, Trash2, Search, GripVertical, Pin, PinOff } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import MDEditor from '@uiw/react-md-editor';
 import axios from 'axios';
 import io from 'socket.io-client';
+import { UserButton, useAuth } from '@clerk/clerk-react';
+import './App.css';
 import {
   DndContext,
   closestCenter,
@@ -33,12 +35,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { UserButton, useAuth } from '@clerk/clerk-react';
-import './App.css';
 
-const API_BASE_URL = 'http://localhost:5001/api';
 
-function SortableNoteCard({ note, selectedNote, onSelect, onDelete }) {
+const API_BASE_URL = 'https://notes-app-backend-41ic.onrender.com/api';
+
+function SortableNoteCard({ note, selectedNote, onSelect, onDelete, onTogglePin }) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   
   const {
@@ -76,17 +77,30 @@ function SortableNoteCard({ note, selectedNote, onSelect, onDelete }) {
                   {note.title}
                 </CardTitle>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowDeleteDialog(true);
-                }}
-                className="h-5 w-5 p-0"
-              >
-                <Trash2 className="w-3 h-3" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTogglePin(note.id, !note.pinned);
+                  }}
+                  className="h-5 w-5 p-0"
+                >
+                  {note.pinned ? <Pin className="w-3 h-3" /> : <PinOff className="w-3 h-3 text-muted-foreground" />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDeleteDialog(true);
+                  }}
+                  className="h-5 w-5 p-0"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="pt-0 px-3">
@@ -136,17 +150,15 @@ function App() {
 
   // Initialize Socket.IO connection
   useEffect(() => {
-    const newSocket = io('http://localhost:5001');
+    const newSocket = io('https://notes-app-backend-41ic.onrender.com');
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
       setIsConnected(true);
-      console.log('Connected to server');
     });
 
     newSocket.on('disconnect', () => {
       setIsConnected(false);
-      console.log('Disconnected from server');
     });
 
     // Listen for real-time note updates
@@ -155,9 +167,13 @@ function App() {
     });
 
     newSocket.on('noteUpdated', (updatedNote) => {
-      setNotes(prev => prev.map(note => 
-        note.id === updatedNote.id ? updatedNote : note
-      ));
+      setNotes(prev => {
+        const newNotes = prev.map(note => 
+          note.id === updatedNote.id ? updatedNote : note
+        );
+        // Sort notes to ensure pinned ones are at the top
+        return newNotes.sort((a, b) => (b.pinned - a.pinned));
+      });
       
       // Update selected note if it's the one being updated
       if (selectedNote && selectedNote.id === updatedNote.id) {
@@ -188,7 +204,6 @@ function App() {
       const response = await axios.get(`${API_BASE_URL}/notes`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      console.log('Fetched notes:', response.data);
       setNotes(response.data);
     } catch (error) {
       console.error('Error fetching notes:', error);
@@ -198,9 +213,11 @@ function App() {
   const createNote = async () => {
     try {
       const token = await getToken();
+
       const newNote = {
-        title: 'Untitled Note',
-        content: '# New Note\n\nStart writing your markdown content here...'
+        title: notes.length > 0 ? `Untitled Note(${notes.length})` : 'Untitled Note',
+        placeholder: 'Start writing your markdown content here...',
+        pinned: false, // New notes are unpinned by default
       };
       
       const response = await axios.post(`${API_BASE_URL}/notes`, newNote, {
@@ -218,7 +235,7 @@ function App() {
       await axios.put(`${API_BASE_URL}/notes/${noteId}`, updates, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
+    
       // Emit real-time update via Socket.IO
       if (socket) {
         socket.emit('noteUpdate', { id: noteId, ...updates });
@@ -236,6 +253,31 @@ function App() {
       });
     } catch (error) {
       console.error('Error deleting note:', error);
+    }
+  };
+
+  const togglePinNote = async (noteId, pinnedStatus) => {
+    try {
+      const token = await getToken();
+      await axios.put(`${API_BASE_URL}/notes/${noteId}`, { pinned: pinnedStatus }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // Optimistically update the UI
+      setNotes(prev => {
+        const newNotes = prev.map(note => 
+          note.id === noteId ? { ...note, pinned: pinnedStatus } : note
+        );
+        return newNotes.sort((a, b) => (b.pinned - a.pinned)); // Re-sort after pinning/unpinning
+      });
+
+      // Emit real-time update via Socket.IO
+      if (socket) {
+        socket.emit('noteUpdate', { id: noteId, pinned: pinnedStatus });
+      }
+
+    } catch (error) {
+      console.error(`Error toggling pin status for note ${noteId}:`, error);
     }
   };
 
@@ -313,7 +355,10 @@ function App() {
             <div className="flex items-center justify-between mb-4">
               <h1 className="text-xl font-bold">Notes App</h1>
               <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                <div 
+                  className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}
+                  title={isConnected ? 'Connected to Server' : 'Disconnected from Server'}
+                />
                 <Button onClick={createNote} size="sm">
                   <Plus className="w-4 h-4" />
                 </Button>
@@ -333,18 +378,27 @@ function App() {
           
           <ScrollArea className="h-[calc(100vh-120px)]">
             <div className="p-2">
-              {/* Temporarily removed DndContext and SortableContext for debugging */}
-              {
-                filteredNotes.map((note) => (
-                  <SortableNoteCard
-                    key={note.id}
-                    note={note}
-                    selectedNote={selectedNote}
-                    onSelect={handleNoteSelect}
-                    onDelete={deleteNote}
-                  />
-                ))
-              }
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={filteredNotes.map(note => note.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {filteredNotes.map((note) => (
+                    <SortableNoteCard
+                      key={note.id}
+                      note={note}
+                      selectedNote={selectedNote}
+                      onSelect={handleNoteSelect}
+                      onDelete={deleteNote}
+                      onTogglePin={togglePinNote}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
               
               {filteredNotes.length === 0 && (
                 <div className="text-center text-muted-foreground mt-8">
@@ -394,7 +448,7 @@ function App() {
                 <p className="mb-4">Select a note from the sidebar or create a new one to get started</p>
                 <Button onClick={createNote}>
                   <Plus className="w-4 h-4 mr-2" />
-                  Create Your First Note
+                  Create Your New Note
                 </Button>
               </div>
             </div>
