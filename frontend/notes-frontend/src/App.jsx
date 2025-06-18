@@ -148,7 +148,7 @@ function App() {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
 
-  // Initialize Socket.IO connection
+  // Initializing Socket.IO connection
   useEffect(() => {
     const newSocket = io('https://notes-app-backend-41ic.onrender.com');
     setSocket(newSocket);
@@ -161,7 +161,7 @@ function App() {
       setIsConnected(false);
     });
 
-    // Listen for real-time note updates
+    // Listening for real-time note updates
     newSocket.on('noteCreated', (note) => {
       setNotes(prev => [note, ...prev]);
     });
@@ -171,11 +171,11 @@ function App() {
         const newNotes = prev.map(note => 
           note.id === updatedNote.id ? updatedNote : note
         );
-        // Sort notes to ensure pinned ones are at the top
+        // Sorting notes to ensure pinned ones are at the top
         return newNotes.sort((a, b) => (b.pinned - a.pinned));
       });
       
-      // Update selected note if it's the one being updated
+      // Updating the selected note if it's the one being updated
       if (selectedNote && selectedNote.id === updatedNote.id) {
         setSelectedNote(updatedNote);
       }
@@ -184,7 +184,7 @@ function App() {
     newSocket.on('noteDeleted', ({ id }) => {
       setNotes(prev => prev.filter(note => note.id !== id));
       
-      // Clear selected note if it was deleted
+      // Clearing the selected note if it was deleted
       if (selectedNote && selectedNote.id === id) {
         setSelectedNote(null);
       }
@@ -193,7 +193,7 @@ function App() {
     return () => newSocket.close();
   }, [selectedNote]);
 
-  // Fetch notes on component mount
+  // Fetching notes on component mount
   useEffect(() => {
     fetchNotes();
   }, []);
@@ -236,7 +236,7 @@ function App() {
         headers: { Authorization: `Bearer ${token}` }
       });
     
-      // Emit real-time update via Socket.IO
+      // Emitting real-time update via Socket.IO
       if (socket) {
         socket.emit('noteUpdate', { id: noteId, ...updates });
       }
@@ -263,15 +263,15 @@ function App() {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      // Optimistically update the UI
+      // Optimistically updating the UI
       setNotes(prev => {
         const newNotes = prev.map(note => 
           note.id === noteId ? { ...note, pinned: pinnedStatus } : note
         );
-        return newNotes.sort((a, b) => (b.pinned - a.pinned)); // Re-sort after pinning/unpinning
+        return newNotes.sort((a, b) => (b.pinned - a.pinned)); // Re-sorting after pinning/unpinning
       });
 
-      // Emit real-time update via Socket.IO
+      // Emitting real-time update via Socket.IO
       if (socket) {
         socket.emit('noteUpdate', { id: noteId, pinned: pinnedStatus });
       }
@@ -284,7 +284,7 @@ function App() {
   const handleNoteSelect = (note) => {
     setSelectedNote(note);
     
-    // Join the note room for real-time collaboration
+    // Joining the note room for real-time collaboration
     if (socket) {
       socket.emit('joinNote', note.id);
     }
@@ -295,7 +295,7 @@ function App() {
       const updatedNote = { ...selectedNote, content: value };
       setSelectedNote(updatedNote);
       
-      // Debounced update to avoid too many API calls
+      // Debouncing the update to avoid too many API calls
       clearTimeout(window.updateTimeout);
       window.updateTimeout = setTimeout(() => {
         updateNote(selectedNote.id, { 
